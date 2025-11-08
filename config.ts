@@ -72,11 +72,11 @@
       '/Applications/Chromium.app/Contents/MacOS/Chromium',
     ],
     win32: [
-      'C:\Program Files\Google\Chrome\Application\chrome.exe',
-      'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
-      'C:\Users\user\AppData\Local\Google\Chrome\Application\chrome.exe',
-      'C:\Program Files\Microsoft\Edge\Application\msedge.exe', // Edge as fallback
-      'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Users\\user\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe', // Edge as fallback
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
     ],
     linux: [
       '/usr/bin/google-chrome',
@@ -88,11 +88,20 @@
     ]
   };
 
-  // Default user data directories by platform
-  const USER_DATA_DIRS: Record<Platform, (homeDir: string) => string> = {
-    darwin: (homeDir: string) => `${homeDir}/Library/Application Support/Google/Chrome`,
-    win32: (homeDir: string) => 'C:\Users\user\AppData\Local\Google\Chrome\User Data\Default',
-    linux: (homeDir: string) => `${homeDir}/.config/google-chrome`
+  // Default user data directories by platform and browser
+  const USER_DATA_DIRS: Record<Platform, Record<string, string>> = {
+    darwin: {
+      chrome: `${getHomeDir()}/Library/Application Support/Google/Chrome`,
+      edge: `${getHomeDir()}/Library/Application Support/Microsoft Edge`
+    },
+    win32: {
+      chrome: 'C:\\Users\\user\\AppData\\Local\\Google\\Chrome\\User Data\\Default',
+      edge: 'C:\\Users\\user\\AppData\\Local\\Microsoft Edge\\User Data\\Default'
+    },
+    linux: {
+      chrome: `${getHomeDir()}/.config/google-chrome`,
+      edge: `${getHomeDir()}/.config/microsoft-edge`
+    }
   };
 
   // Determine Chrome path based on OS
@@ -131,13 +140,21 @@
     return paths[0];
   }
 
-  // Get default user data directory based on OS
-  function getUserDataDir(): string {
+  // Get default user data directory based on OS and browser
+  function getUserDataDir(browser: string = 'chrome'): string {
     const homeDir = getHomeDir() || getEnvVar('HOME') || getEnvVar('USERPROFILE') || '';
     const currentPlatform = getPlatform();
     
-    const dirFn = USER_DATA_DIRS[currentPlatform] || USER_DATA_DIRS.linux;
-    return dirFn(homeDir);
+    const dirs = USER_DATA_DIRS[currentPlatform] || USER_DATA_DIRS.linux;
+    return dirs[browser] || dirs.chrome;
+  }
+
+  // Detect browser type from path
+  function detectBrowserType(path: string): string {
+    if (path.toLowerCase().includes('edge') || path.toLowerCase().includes('msedge')) {
+      return 'edge';
+    }
+    return 'chrome';
   }
 
   // Basic Chrome command class - actual initialization happens in main.ts
@@ -171,4 +188,5 @@
   }
 
   export const chromeCommand = new ChromeCommand();
+  export { detectBrowserType };
 }
