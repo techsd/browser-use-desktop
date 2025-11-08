@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, screen } from 'electron';
 import path from 'node:path';
 import { spawn, ChildProcess } from 'child_process';
 import started from 'electron-squirrel-startup';
-import { pythonCommand, chromeCommand } from './config';
+import { pythonCommand, chromeCommand, detectBrowserType, getUserDataDir } from './config';
 import fs from 'fs';
 import os from 'os';
 import http from 'http';
@@ -139,7 +139,7 @@ function startPyProcess(mainWindow: BrowserWindow) {
   }
   
   // Ensure user data directory exists
-  const userDataDir = ensureChromeUserDataDir();
+  const userDataDir = ensureChromeUserDataDir(chromePath);
   
   // Working directory for the subprocess
   const options = {
@@ -332,7 +332,7 @@ function startChromeProcess(mainWindow: BrowserWindow) {
   chromeCommand.path = chromePath;
   
   // Ensure Chrome user data directory exists
-  const userDataDir = ensureChromeUserDataDir();
+  const userDataDir = ensureChromeUserDataDir(chromePath);
   
   // Get screen dimensions for window positioning
   const primaryDisplay = screen.getPrimaryDisplay();
@@ -520,18 +520,18 @@ function findBestChromeExecutable(): string | null {
     paths.push('/opt/homebrew/bin/chromium');
   } else if (process.platform === 'win32') {
     // Windows paths
-    paths.push('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
-    paths.push('C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe');
+    paths.push('C:\Program Files\Google\Chrome\Application\chrome.exe');
+    paths.push('C:\Program Files (x86)\Google\Chrome\Application\chrome.exe');
     
     // Add LocalAppData path if available
     const localAppData = process.env.LOCALAPPDATA;
     if (localAppData) {
-      paths.push(`${localAppData}\\Google\\Chrome\\Application\\chrome.exe`);
+      paths.push(`${localAppData}\Google\Chrome\Application\chrome.exe`);
     }
     
     // Microsoft Edge as fallback (Chromium-based)
-    paths.push('C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe');
-    paths.push('C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe');
+    paths.push('C:\Program Files\Microsoft\Edge\Application\msedge.exe');
+    paths.push('C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe');
   } else {
     // Linux paths
     paths.push('/usr/bin/google-chrome');
@@ -558,30 +558,23 @@ function findBestChromeExecutable(): string | null {
 
 /**
  * Ensures the Chrome user data directory exists
+ * @param chromePath The path to the Chrome executable
  * @returns The path to the Chrome user data directory
  */
-function ensureChromeUserDataDir(): string {
-  // Determine user data directory based on platform
-  let userDataDir: string;
-  const homeDir = os.homedir();
-  const appName = 'browser-use-desktop';
+function ensureChromeUserDataDir(chromePath: string | null): string {
+  // Detect browser type
+  const browserType = chromePath ? detectBrowserType(chromePath) : 'chrome';
+  console.log('Detected browser type:', browserType);
   
-  if (process.platform === 'darwin') {
-    userDataDir = `${homeDir}/Library/Application Support/${appName}/ChromeProfile`;
-  } else if (process.platform === 'win32') {
-    userDataDir = `${homeDir}\\AppData\\Local\\${appName}\\ChromeProfile`;
-  } else {
-    userDataDir = `${homeDir}/.config/${appName}/ChromeProfile`;
-  }
-  
-  // Log the user data directory path
-  console.log(`Using Chrome user data directory: ${userDataDir}`);
+  // Get user data directory from config based on browser type
+  const userDataDir = getUserDataDir(browserType);
+  console.log(`Using ${browserType} user data directory: ${userDataDir}`);
   
   // Ensure the directory exists
   try {
     if (!fs.existsSync(userDataDir)) {
       fs.mkdirSync(userDataDir, { recursive: true });
-      console.log(`Created Chrome user data directory: ${userDataDir}`);
+      console.log(`Created ${browserType} user data directory: ${userDataDir}`);
       
       // Create first_run file to prevent first run experience
       const firstRunPath = path.join(userDataDir, 'First Run');
@@ -627,14 +620,15 @@ function ensureChromeUserDataDir(): string {
       fs.writeFileSync(prefsPath, JSON.stringify(defaultPrefs, null, 2));
       console.log('Created default Chrome preferences file');
     } else {
-      console.log(`Using existing Chrome user data directory: ${userDataDir}`);
+      console.log(`Using existing ${browserType} user data directory: ${userDataDir}`);
     }
   } catch (err) {
-    console.error(`Error creating Chrome user data directory: ${err}`);
+    console.error(`Error creating ${browserType} user data directory: ${err}`);
     // Fallback to a temporary directory
-    userDataDir = path.join(os.tmpdir(), `${appName}-chrome-profile`);
-    fs.mkdirSync(userDataDir, { recursive: true });
-    console.log(`Using fallback Chrome user data directory: ${userDataDir}`);
+    const fallbackDir = path.join(os.tmpdir(), `${browserType}-user-data`);
+    fs.mkdirSync(fallbackDir, { recursive: true });
+    console.log(`Using fallback ${browserType} user data directory: ${fallbackDir}`);
+    return fallbackDir;
   }
   
   return userDataDir;
